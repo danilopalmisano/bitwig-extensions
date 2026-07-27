@@ -34,7 +34,7 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
         selectTrackBinding =
             new SegmentDisplayBinding("Select Track", cursorTrack.name(), displayControl.getTemporaryDisplay());
         this.addBinding(selectTrackBinding);
-        
+
         bindNavigation(hwElements);
     }
 
@@ -43,10 +43,10 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
         final LaunchButton trackRightButton = hwElements.getButtons(CcConstValues.TRACK_RIGHT);
         final LaunchButton pageUpButton = hwElements.getButtons(CcConstValues.PAGE_UP);
         final LaunchButton pageDownButton = hwElements.getButtons(CcConstValues.PAGE_DOWN);
-        
+
         cursorDevice.hasPrevious().markInterested();
         cursorDevice.hasNext().markInterested();
-        
+
         // TRACK_LEFT button - VST nav in ARRANGER, channel nav in LAUNCHER
         trackLeftButton.bindLight(this, () -> {
             if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
@@ -62,7 +62,7 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
                 transportHandler.navLeft();
             }
         });
-        
+
         // TRACK_RIGHT button - VST nav in ARRANGER, channel nav in LAUNCHER
         trackRightButton.bindLight(this, () -> {
             if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
@@ -78,7 +78,7 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
                 transportHandler.navRight();
             }
         });
-        
+
         // PAGE_UP button
         pageUpButton.bindLight(this, () -> {
             if (shiftState.get()) {
@@ -98,7 +98,7 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
                 cursorDevice.selectPrevious();
             }
         });
-        
+
         // PAGE_DOWN button
         pageDownButton.bindLight(this, () -> {
             if (shiftState.get()) {
