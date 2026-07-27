@@ -25,7 +25,6 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
         this.specLauncherLayer = new Layer(layers, "SPEC_LAUNCHER");
         deviceRemotes.bind(this, hwElements, displayControl);
 
-        transportHandler.activateTrackDeviceNavLayer(deviceRemotes);
         transportHandler.bindControl(this, hwElements, 2);
         transportHandler.bindArrangerLayoutControl(this, hwElements, 2);
         transportHandler.bindLauncherLayoutControl(specLauncherLayer, hwElements, 2);
@@ -35,6 +34,90 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
         selectTrackBinding =
             new SegmentDisplayBinding("Select Track", cursorTrack.name(), displayControl.getTemporaryDisplay());
         this.addBinding(selectTrackBinding);
+        
+        bindNavigation(hwElements);
+    }
+
+    private void bindNavigation(final LaunchControlXlHwElements hwElements) {
+        final LaunchButton trackLeftButton = hwElements.getButtons(CcConstValues.TRACK_LEFT);
+        final LaunchButton trackRightButton = hwElements.getButtons(CcConstValues.TRACK_RIGHT);
+        final LaunchButton pageUpButton = hwElements.getButtons(CcConstValues.PAGE_UP);
+        final LaunchButton pageDownButton = hwElements.getButtons(CcConstValues.PAGE_DOWN);
+        
+        cursorDevice.hasPrevious().markInterested();
+        cursorDevice.hasNext().markInterested();
+        
+        // TRACK_LEFT button - VST nav in ARRANGER, channel nav in LAUNCHER
+        trackLeftButton.bindLight(this, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return cursorDevice.hasPrevious().get() ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return transportHandler.canNavLeft(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        trackLeftButton.bindRepeatHold(this, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                cursorDevice.selectPrevious();
+            } else {
+                transportHandler.navLeft();
+            }
+        });
+        
+        // TRACK_RIGHT button - VST nav in ARRANGER, channel nav in LAUNCHER
+        trackRightButton.bindLight(this, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return cursorDevice.hasNext().get() ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return transportHandler.canNavRight(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        trackRightButton.bindRepeatHold(this, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                cursorDevice.selectNext();
+            } else {
+                transportHandler.navRight();
+            }
+        });
+        
+        // PAGE_UP button
+        pageUpButton.bindLight(this, () -> {
+            if (shiftState.get()) {
+                return deviceRemotes.canGoBack() ? RgbState.WHITE : RgbState.OFF;
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return transportHandler.canNavLeft(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return cursorDevice.hasPrevious().get() ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        pageUpButton.bindRepeatHold(this, () -> {
+            if (shiftState.get()) {
+                deviceRemotes.selectPreviousPage();
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                transportHandler.navLeft();
+            } else {
+                cursorDevice.selectPrevious();
+            }
+        });
+        
+        // PAGE_DOWN button
+        pageDownButton.bindLight(this, () -> {
+            if (shiftState.get()) {
+                return deviceRemotes.canGoForward() ? RgbState.WHITE : RgbState.OFF;
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return transportHandler.canNavRight(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return cursorDevice.hasNext().get() ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        pageDownButton.bindRepeatHold(this, () -> {
+            if (shiftState.get()) {
+                deviceRemotes.selectNextPage();
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                transportHandler.navRight();
+            } else {
+                cursorDevice.selectNext();
+            }
+        });
     }
 
 

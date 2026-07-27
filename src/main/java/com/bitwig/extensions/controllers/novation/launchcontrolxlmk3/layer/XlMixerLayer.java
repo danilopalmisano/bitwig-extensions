@@ -29,6 +29,7 @@ import com.bitwig.extensions.controllers.novation.launchcontrolxlmk3.control.Lau
 import com.bitwig.extensions.controllers.novation.launchcontrolxlmk3.display.DisplayControl;
 import com.bitwig.extensions.controllers.novation.launchcontrolxlmk3.display.GradientColor;
 import com.bitwig.extensions.framework.Layers;
+import com.bitwig.extensions.framework.values.LayoutType;
 import com.bitwig.extensions.framework.di.Activate;
 import com.bitwig.extensions.framework.di.Component;
 import com.bitwig.extensions.framework.di.Inject;
@@ -87,9 +88,97 @@ public class XlMixerLayer extends AbstractMixerLayer {
     
     private void bindNavigation(final LaunchControlXlHwElements hwElements) {
         final CursorTrack cursorTrack = viewControl.getCursorTrack();
+        final LaunchButton trackLeftButton = hwElements.getButtons(CcConstValues.TRACK_LEFT);
+        final LaunchButton trackRightButton = hwElements.getButtons(CcConstValues.TRACK_RIGHT);
+        final LaunchButton pageUpButton = hwElements.getButtons(CcConstValues.PAGE_UP);
+        final LaunchButton pageDownButton = hwElements.getButtons(CcConstValues.PAGE_DOWN);
         
         mixerLayer.addBinding(
             new SegmentDisplayBinding("Select Track", cursorTrack.name(), displayControl.getFixedDisplay()));
+        
+        final SendBank refBank = viewControl.getRefSendBank();
+        final Send send1 = refBank.getItemAt(0);
+        final Send send2 = refBank.getItemAt(1);
+        send1.name().markInterested();
+        send2.name().markInterested();
+        refBank.canScrollBackwards().markInterested();
+        refBank.canScrollForwards().markInterested();
+        
+        // TRACK_LEFT button - VST nav in ARRANGER, channel nav in LAUNCHER
+        trackLeftButton.bindLight(mixerLayer, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return viewControl.getCursorDevice().hasPrevious().get() ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return transportHandler.canNavLeft(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        trackLeftButton.bindRepeatHold(mixerLayer, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                viewControl.getCursorDevice().selectPrevious();
+            } else {
+                transportHandler.navLeft();
+            }
+        });
+        
+        // TRACK_RIGHT button - VST nav in ARRANGER, channel nav in LAUNCHER
+        trackRightButton.bindLight(mixerLayer, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return viewControl.getCursorDevice().hasNext().get() ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return transportHandler.canNavRight(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        trackRightButton.bindRepeatHold(mixerLayer, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                viewControl.getCursorDevice().selectNext();
+            } else {
+                transportHandler.navRight();
+            }
+        });
+        
+        // PAGE_UP button - SHIFT scrolls sends, no SHIFT does channel nav in ARRANGER, VST nav in LAUNCHER
+        pageUpButton.bindLight(mixerLayer, () -> {
+            if (transportHandler.getShiftState().get()) {
+                return refBank.canScrollBackwards().get() ? RgbState.WHITE : RgbState.OFF;
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return transportHandler.canNavLeft(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return viewControl.getCursorDevice().hasPrevious().get() ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        pageUpButton.bindRepeatHold(mixerLayer, () -> {
+            if (transportHandler.getShiftState().get()) {
+                viewControl.navigateSends(-1);
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                transportHandler.navLeft();
+            } else {
+                viewControl.getCursorDevice().selectPrevious();
+            }
+        });
+        
+        // PAGE_DOWN button - SHIFT scrolls sends, no SHIFT does channel nav in ARRANGER, VST nav in LAUNCHER
+        pageDownButton.bindLight(mixerLayer, () -> {
+            if (transportHandler.getShiftState().get()) {
+                return refBank.canScrollForwards().get() ? RgbState.WHITE : RgbState.OFF;
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return transportHandler.canNavRight(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return viewControl.getCursorDevice().hasNext().get() ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        pageDownButton.bindRepeatHold(mixerLayer, () -> {
+            if (transportHandler.getShiftState().get()) {
+                viewControl.navigateSends(1);
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                transportHandler.navRight();
+            } else {
+                viewControl.getCursorDevice().selectNext();
+            }
+        });
+        
+        refBank.scrollPosition().addValueObserver(pos -> displayControl.show2LineTemporary(
+            "Sends",
+            "%s - %s".formatted(send1.name().get(), send2.name().get())));
     }
     
     
