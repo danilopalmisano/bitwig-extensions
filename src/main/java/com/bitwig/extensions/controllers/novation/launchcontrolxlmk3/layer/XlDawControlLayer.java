@@ -25,8 +25,6 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
         this.specLauncherLayer = new Layer(layers, "SPEC_LAUNCHER");
         deviceRemotes.bind(this, hwElements, displayControl);
 
-        bindNavigation(hwElements);
-        transportHandler.bindTrackNavigation(this);
         transportHandler.bindControl(this, hwElements, 2);
         transportHandler.bindArrangerLayoutControl(this, hwElements, 2);
         transportHandler.bindLauncherLayoutControl(specLauncherLayer, hwElements, 2);
@@ -36,6 +34,90 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
         selectTrackBinding =
             new SegmentDisplayBinding("Select Track", cursorTrack.name(), displayControl.getTemporaryDisplay());
         this.addBinding(selectTrackBinding);
+
+        bindNavigation(hwElements);
+    }
+
+    private void bindNavigation(final LaunchControlXlHwElements hwElements) {
+        final LaunchButton trackLeftButton = hwElements.getButtons(CcConstValues.TRACK_LEFT);
+        final LaunchButton trackRightButton = hwElements.getButtons(CcConstValues.TRACK_RIGHT);
+        final LaunchButton pageUpButton = hwElements.getButtons(CcConstValues.PAGE_UP);
+        final LaunchButton pageDownButton = hwElements.getButtons(CcConstValues.PAGE_DOWN);
+
+        cursorDevice.hasPrevious().markInterested();
+        cursorDevice.hasNext().markInterested();
+
+        // TRACK_LEFT button - VST nav in ARRANGER, channel nav in LAUNCHER
+        trackLeftButton.bindLight(this, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return cursorDevice.hasPrevious().get() ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return transportHandler.canNavLeft(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        trackLeftButton.bindRepeatHold(this, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                cursorDevice.selectPrevious();
+            } else {
+                transportHandler.navLeft();
+            }
+        });
+
+        // TRACK_RIGHT button - VST nav in ARRANGER, channel nav in LAUNCHER
+        trackRightButton.bindLight(this, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return cursorDevice.hasNext().get() ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return transportHandler.canNavRight(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        trackRightButton.bindRepeatHold(this, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                cursorDevice.selectNext();
+            } else {
+                transportHandler.navRight();
+            }
+        });
+
+        // PAGE_UP button
+        pageUpButton.bindLight(this, () -> {
+            if (shiftState.get()) {
+                return deviceRemotes.canGoBack() ? RgbState.WHITE : RgbState.OFF;
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return transportHandler.canNavLeft(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return cursorDevice.hasPrevious().get() ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        pageUpButton.bindRepeatHold(this, () -> {
+            if (shiftState.get()) {
+                deviceRemotes.selectPreviousPage();
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                transportHandler.navLeft();
+            } else {
+                cursorDevice.selectPrevious();
+            }
+        });
+
+        // PAGE_DOWN button
+        pageDownButton.bindLight(this, () -> {
+            if (shiftState.get()) {
+                return deviceRemotes.canGoForward() ? RgbState.WHITE : RgbState.OFF;
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return transportHandler.canNavRight(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return cursorDevice.hasNext().get() ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        pageDownButton.bindRepeatHold(this, () -> {
+            if (shiftState.get()) {
+                deviceRemotes.selectNextPage();
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                transportHandler.navRight();
+            } else {
+                cursorDevice.selectNext();
+            }
+        });
     }
 
 
@@ -43,47 +125,6 @@ public class XlDawControlLayer extends AbstractDawControlLayer {
         if (isActive()) {
             specLauncherLayer.setIsActive(newValue == LayoutType.LAUNCHER);
         }
-    }
-
-    private void bindNavigation(final LaunchControlXlHwElements hwElements) {
-        final LaunchButton pageUpButton = hwElements.getButtons(CcConstValues.PAGE_UP);
-        final LaunchButton pageDownButton = hwElements.getButtons(CcConstValues.PAGE_DOWN);
-        pageUpButton.bindLight(this, this::canPageNavigateBackward);
-        pageDownButton.bindLight(this, this::canPageNavigateForward);
-        pageUpButton.bindRepeatHold(this, this::navigateBackward);
-        pageDownButton.bindRepeatHold(this, this::navigateForward);
-    }
-
-    private RgbState canPageNavigateBackward() {
-        if (shiftState.get()) {
-            return cursorDevice.hasPrevious().get() ? RgbState.DIM_WHITE : RgbState.OFF;
-        }
-        return deviceRemotes.canGoBack() ? RgbState.DIM_WHITE : RgbState.OFF;
-    }
-
-    private RgbState canPageNavigateForward() {
-        if (shiftState.get()) {
-            return cursorDevice.hasNext().get() ? RgbState.DIM_WHITE : RgbState.OFF;
-        }
-        return deviceRemotes.canGoForward() ? RgbState.DIM_WHITE : RgbState.OFF;
-    }
-
-    private void navigateBackward() {
-        if (shiftState.get()) {
-            cursorDevice.selectPrevious();
-        } else {
-            deviceRemotes.selectPreviousPage();
-        }
-        displayControl.cancelTemporary();
-    }
-
-    private void navigateForward() {
-        if (shiftState.get()) {
-            cursorDevice.selectNext();
-        } else {
-            deviceRemotes.selectNextPage();
-        }
-        displayControl.cancelTemporary();
     }
 
     @Override

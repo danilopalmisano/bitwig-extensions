@@ -29,71 +29,73 @@ import com.bitwig.extensions.controllers.novation.launchcontrolxlmk3.control.Lau
 import com.bitwig.extensions.controllers.novation.launchcontrolxlmk3.display.DisplayControl;
 import com.bitwig.extensions.controllers.novation.launchcontrolxlmk3.display.GradientColor;
 import com.bitwig.extensions.framework.Layers;
+import com.bitwig.extensions.framework.values.LayoutType;
 import com.bitwig.extensions.framework.di.Activate;
 import com.bitwig.extensions.framework.di.Component;
 import com.bitwig.extensions.framework.di.Inject;
 
 @Component(tag = "XLModel")
 public class XlMixerLayer extends AbstractMixerLayer {
-    
+
     @Inject
     private XlDawControlLayer dawLayer;
-    
-    
+
+
     private Row1ButtonMode row1Mode = Row1ButtonMode.SOLO;
     private Row2ButtonMode row2Mode = Row2ButtonMode.SELECT;
-    
+
     private enum Row1ButtonMode {
         SOLO,
         ARM
     }
-    
+
     private enum Row2ButtonMode {
         SELECT,
         MUTE
     }
-    
+
     public XlMixerLayer(final Layers layers, final LaunchControlXlHwElements hwElements,
         final LaunchViewControl viewControl, final DisplayControl displayControl,
         final LaunchControlMidiProcessor midiProcessor, final ControllerHost host,
         final TransportHandler transportHandler, final ButtonLayers buttonLayers) {
         super(layers, midiProcessor, host, viewControl, hwElements, displayControl, transportHandler, buttonLayers);
-        
+
         final TrackBank trackBank = viewControl.getTrackBank();
         for (int i = 0; i < 8; i++) {
             bindTrack(hwElements, trackBank, i);
         }
-        
+
         bindNavigation(hwElements);
         transportHandler.bindTransport(this);
         final LaunchButton soloArmButton = hwElements.getButtons(CcConstValues.SOLO_ARM_MODE);
         final LaunchButton muteSelectButton = hwElements.getButtons(CcConstValues.MUTE_SELECT_MODE);
-        
+
         final LaunchButton specModeButton = hwElements.getButtons(CcConstValues.DAW_SPEC);
         specModeButton.bindLight(this, () -> RgbState.BLUE);
         //specModeButton.bindPressed(this, () -> LaunchControlXlMk3Extension.println(" > PRESS SPEC >"));
-        
+
         soloArmButton.bindLight(this, () -> row1Mode == Row1ButtonMode.ARM ? RgbState.RED : RgbState.YELLOW);
         muteSelectButton.bindLight(this, () -> row2Mode == Row2ButtonMode.SELECT ? RgbState.WHITE : RgbState.ORANGE);
         soloArmButton.bindPressed(this, this::toggleSoloArmMode);
         muteSelectButton.bindPressed(this, this::toggleSelectMuteMode);
     }
-    
+
     @Activate
     public void init() {
         this.setIsActive(true);
         applyMode();
     }
-    
+
     private void bindNavigation(final LaunchControlXlHwElements hwElements) {
+        final CursorTrack cursorTrack = viewControl.getCursorTrack();
+        final LaunchButton trackLeftButton = hwElements.getButtons(CcConstValues.TRACK_LEFT);
+        final LaunchButton trackRightButton = hwElements.getButtons(CcConstValues.TRACK_RIGHT);
         final LaunchButton pageUpButton = hwElements.getButtons(CcConstValues.PAGE_UP);
         final LaunchButton pageDownButton = hwElements.getButtons(CcConstValues.PAGE_DOWN);
-        final CursorTrack cursorTrack = viewControl.getCursorTrack();
-        transportHandler.bindTrackNavigation(mixerLayer);
-        
+
         mixerLayer.addBinding(
             new SegmentDisplayBinding("Select Track", cursorTrack.name(), displayControl.getFixedDisplay()));
-        
+
         final SendBank refBank = viewControl.getRefSendBank();
         final Send send1 = refBank.getItemAt(0);
         final Send send2 = refBank.getItemAt(1);
@@ -101,17 +103,85 @@ public class XlMixerLayer extends AbstractMixerLayer {
         send2.name().markInterested();
         refBank.canScrollBackwards().markInterested();
         refBank.canScrollForwards().markInterested();
-        
-        pageUpButton.bindLight(mixerLayer, () -> refBank.canScrollBackwards().get() ? RgbState.WHITE : RgbState.OFF);
-        pageDownButton.bindLight(mixerLayer, () -> refBank.canScrollForwards().get() ? RgbState.WHITE : RgbState.OFF);
-        pageUpButton.bindRepeatHold(mixerLayer, () -> viewControl.navigateSends(-1));
-        pageDownButton.bindRepeatHold(mixerLayer, () -> viewControl.navigateSends(1));
+
+        // TRACK_LEFT button - VST nav in ARRANGER, channel nav in LAUNCHER
+        trackLeftButton.bindLight(mixerLayer, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return viewControl.getCursorDevice().hasPrevious().get() ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return transportHandler.canNavLeft(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        trackLeftButton.bindRepeatHold(mixerLayer, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                viewControl.getCursorDevice().selectPrevious();
+            } else {
+                transportHandler.navLeft();
+            }
+        });
+
+        // TRACK_RIGHT button - VST nav in ARRANGER, channel nav in LAUNCHER
+        trackRightButton.bindLight(mixerLayer, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return viewControl.getCursorDevice().hasNext().get() ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return transportHandler.canNavRight(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        trackRightButton.bindRepeatHold(mixerLayer, () -> {
+            if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                viewControl.getCursorDevice().selectNext();
+            } else {
+                transportHandler.navRight();
+            }
+        });
+
+        // PAGE_UP button - SHIFT scrolls sends, no SHIFT does channel nav in ARRANGER, VST nav in LAUNCHER
+        pageUpButton.bindLight(mixerLayer, () -> {
+            if (transportHandler.getShiftState().get()) {
+                return refBank.canScrollBackwards().get() ? RgbState.WHITE : RgbState.OFF;
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return transportHandler.canNavLeft(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return viewControl.getCursorDevice().hasPrevious().get() ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        pageUpButton.bindRepeatHold(mixerLayer, () -> {
+            if (transportHandler.getShiftState().get()) {
+                viewControl.navigateSends(-1);
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                transportHandler.navLeft();
+            } else {
+                viewControl.getCursorDevice().selectPrevious();
+            }
+        });
+
+        // PAGE_DOWN button - SHIFT scrolls sends, no SHIFT does channel nav in ARRANGER, VST nav in LAUNCHER
+        pageDownButton.bindLight(mixerLayer, () -> {
+            if (transportHandler.getShiftState().get()) {
+                return refBank.canScrollForwards().get() ? RgbState.WHITE : RgbState.OFF;
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                return transportHandler.canNavRight(cursorTrack) ? RgbState.WHITE : RgbState.OFF;
+            } else {
+                return viewControl.getCursorDevice().hasNext().get() ? RgbState.WHITE : RgbState.OFF;
+            }
+        });
+        pageDownButton.bindRepeatHold(mixerLayer, () -> {
+            if (transportHandler.getShiftState().get()) {
+                viewControl.navigateSends(1);
+            } else if (transportHandler.getPanelLayout().get() == LayoutType.ARRANGER) {
+                transportHandler.navRight();
+            } else {
+                viewControl.getCursorDevice().selectNext();
+            }
+        });
+
         refBank.scrollPosition().addValueObserver(pos -> displayControl.show2LineTemporary(
             "Sends",
             "%s - %s".formatted(send1.name().get(), send2.name().get())));
     }
-    
-    
+
+
     private void bindTrack(final LaunchControlXlHwElements hwElements, final TrackBank trackBank, final int index) {
         final Track track = trackBank.getItemAt(index);
         final Send send1 = track.sendBank().getItemAt(0);
@@ -126,23 +196,23 @@ public class XlMixerLayer extends AbstractMixerLayer {
         track.exists().markInterested();
         track.mute().markInterested();
         track.solo().markInterested();
-        
+
         final LaunchAbsoluteEncoder row1Encoder = hwElements.getAbsoluteEncoder(0, index);
         final LaunchAbsoluteEncoder row2Encoder = hwElements.getAbsoluteEncoder(1, index);
         final LaunchRelativeEncoder row3Encoder = hwElements.getRelativeEncoder(2, index);
-        
+
         final ParameterDisplayBinding send1DisplayBinding =
             new ParameterDisplayBinding(new DisplayId(row1Encoder.getTargetId(), displayControl), track.name(), send1);
         mixerLayer.addBinding(send1DisplayBinding);
         mixerLayer.addBinding(new AbsoluteEncoderBinding(send1, row1Encoder));
         mixerLayer.addBinding(new LightSendValueBindings(send1, row1Encoder.getLight()));
-        
+
         final ParameterDisplayBinding send2DisplayBinding =
             new ParameterDisplayBinding(new DisplayId(row2Encoder.getTargetId(), displayControl), track.name(), send2);
         mixerLayer.addBinding(send2DisplayBinding);
         mixerLayer.addBinding(new LightSendValueBindings(send2, row2Encoder.getLight()));
         mixerLayer.addBinding(new AbsoluteEncoderBinding(send2, hwElements.getAbsoluteEncoder(1, index)));
-        
+
         // fixedPanLabel
         final ParameterDisplayBinding panDisplayBinding =
             new ParameterDisplayBinding(
@@ -150,7 +220,7 @@ public class XlMixerLayer extends AbstractMixerLayer {
         mixerLayer.addBinding(panDisplayBinding);
         mixerLayer.addBinding(new LightValueBindings(track.pan(), row3Encoder.getLight(), GradientColor.PAN));
         mixerLayer.addBinding(new RelativeEncoderBinding(track.pan(), row3Encoder));
-        
+
         // fixedVolumeLabel
         final ControlTargetId sliderId = new ControlTargetId(index);
         final ParameterDisplayBinding volumeDisplayBinding =
@@ -158,20 +228,20 @@ public class XlMixerLayer extends AbstractMixerLayer {
         mixerLayer.addBinding(volumeDisplayBinding);
         final HardwareSlider slider = hwElements.getSlider(index);
         this.addBinding(new SliderBinding(sliderId, track.volume(), slider));
-        
+
         final LaunchButton row2Button = hwElements.getRowButtons(1, index);
         final LaunchButton row1Button = hwElements.getRowButtons(0, index);
         row1Button.bindLight(buttonLayers.getArmLayer(), () -> armColor(track));
         row1Button.bindIsPressed(buttonLayers.getArmLayer(), pressed -> toggleArm(pressed, track));
         row1Button.bindLight(buttonLayers.getSoloLayer(), () -> soloColor(track));
         row1Button.bindIsPressed(buttonLayers.getSoloLayer(), pressed -> toggleSolo(pressed, track));
-        
+
         row2Button.bindLight(buttonLayers.getSelectLayer(), () -> selectColor(track, index));
         row2Button.bindPressed(buttonLayers.getSelectLayer(), () -> selectTrack(track));
         row2Button.bindLight(buttonLayers.getMuteLayer(), () -> muteColor(track));
         row2Button.bindPressed(buttonLayers.getMuteLayer(), () -> track.mute().toggle());
     }
-    
+
     private void toggleSoloArmMode() {
         if (this.row1Mode == Row1ButtonMode.ARM) {
             this.row1Mode = Row1ButtonMode.SOLO;
@@ -182,7 +252,7 @@ public class XlMixerLayer extends AbstractMixerLayer {
         }
         applyArmSoloMode();
     }
-    
+
     private void toggleSelectMuteMode() {
         if (this.row2Mode == Row2ButtonMode.SELECT) {
             this.row2Mode = Row2ButtonMode.MUTE;
@@ -193,7 +263,7 @@ public class XlMixerLayer extends AbstractMixerLayer {
         }
         applySelectMuteMode();
     }
-    
+
     protected void applyMode() {
         if (mode == BaseMode.MIXER) {
             midiProcessor.setToRelative(0, false);
@@ -206,23 +276,23 @@ public class XlMixerLayer extends AbstractMixerLayer {
         }
         this.mixerLayer.setIsActive(mode == BaseMode.MIXER);
         this.dawLayer.setIsActive(mode == BaseMode.DAW);
-        
-        
+
+
         applySelectMuteMode();
         applyArmSoloMode();
-        
+
         this.buttonLayers.getSelectLayer().setIsActive(true);
-        
+
     }
-    
+
     private void applyArmSoloMode() {
         this.buttonLayers.getSoloLayer().setIsActive(row1Mode == Row1ButtonMode.SOLO);
         this.buttonLayers.getArmLayer().setIsActive(row1Mode == Row1ButtonMode.ARM);
     }
-    
+
     private void applySelectMuteMode() {
         this.buttonLayers.getSelectLayer().setIsActive(row2Mode == Row2ButtonMode.SELECT);
         this.buttonLayers.getMuteLayer().setIsActive(row2Mode == Row2ButtonMode.MUTE);
     }
-    
+
 }
